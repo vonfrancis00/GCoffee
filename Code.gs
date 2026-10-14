@@ -264,8 +264,8 @@ function calculate_(items) {
     recipe.forEach(r=>{
       const material=inventory.find(m=>String(m.ID)===String(r.MaterialID));
       if(!material)throw new Error('Recipe references missing material '+r.MaterialID);
-      const unit=String(r.Unit||material.Unit);
-      if(unit!==String(material.Unit))throw new Error('Unit mismatch for '+material.Name+': recipe '+unit+', inventory '+material.Unit);
+      const unit=normalizeUnit_(material.Unit);
+      if(normalizeUnit_(r.Unit||material.Unit)!==unit)throw new Error('Unit mismatch for '+material.Name+': recipe '+r.Unit+', inventory '+material.Unit);
       const mod=mods[r.MaterialID]||{mode:'Default'};
       let per=Number(r.Quantity);
       if(mod.mode==='Remove')per=0;
@@ -359,7 +359,7 @@ function saveProduct_(b) {
 function saveRecipe_(b) {
   const pid=String(b.productId||b.ProductID||'');if(!rows_('Products').some(p=>String(p.ProductID)===pid))throw new Error('Product not found.');
   const recipe=Array.isArray(b.recipe)?b.recipe:[];const inventory=rows_('Inventory');
-  recipe.forEach(r=>{const m=inventory.find(x=>String(x.ID)===String(r.materialId||r.MaterialID));if(!m)throw new Error('Unknown material in recipe.');if(String(r.unit||r.Unit)!==String(m.Unit))throw new Error('Unit mismatch for '+m.Name);if(validQty_(r.quantity??r.Quantity,'Recipe quantity')<0)throw new Error('Negative recipe quantity is not allowed.');});
+  recipe.forEach(r=>{const m=inventory.find(x=>String(x.ID)===String(r.materialId||r.MaterialID));if(!m)throw new Error('Unknown material in recipe.');if(normalizeUnit_(r.unit||r.Unit)!==normalizeUnit_(m.Unit))throw new Error('Unit mismatch for '+m.Name);if(validQty_(r.quantity??r.Quantity,'Recipe quantity')<0)throw new Error('Negative recipe quantity is not allowed.');});
   const sh=tab_('Recipes'),data=sh.getDataRange().getValues(),headers=headers_('Recipes',data[0]),pc=headers.indexOf('ProductID');
   for(let i=data.length-1;i>=1;i--)if(String(data[i][pc])===pid)sh.deleteRow(i+1);
   recipe.forEach(r=>{const mid=String(r.materialId||r.MaterialID);appendObject_('Recipes',{RecipeID:'R-'+pid+'-'+mid,ProductID:pid,MaterialID:mid,Quantity:validQty_(r.quantity??r.Quantity,'Recipe quantity'),Unit:String(r.unit||r.Unit)});});
@@ -370,6 +370,8 @@ function saveModifier_(b) {
   appendObject_('Modifiers',{ModifierID:id,ProductID:String(b.productId||''),MaterialID:String(b.materialId||''),ModifierName:String(b.modifierName||''),Mode:String(b.mode||'Default'),Quantity:validQty_(b.quantity||0,'Modifier quantity'),Unit:String(b.unit||''),Enabled:b.enabled===false?'FALSE':'TRUE'});
   return {message:'Modifier saved.'};
 }
+// Spelling aliases only: never convert quantities between different measures.
+function normalizeUnit_(value){const unit=String(value||'').trim().toLowerCase();return ['pc','pcs','piece','pieces'].indexOf(unit)>=0?'pcs':unit;}
 function validateBusinessDate_(d){if(!/^\d{4}-\d{2}-\d{2}$/.test(String(d||'')))throw new Error('Business date must be YYYY-MM-DD.');}
 function validQty_(v,label){if(v===null||v===undefined||String(v).trim()==='')throw new Error(label+' is required.');const n=Number(v);if(!Number.isFinite(n)||n<0)throw new Error(label+' must be a finite nonnegative number.');return n;}
 function roundQty_(n){return Math.round((Number(n)+Number.EPSILON)*1000000)/1000000;}

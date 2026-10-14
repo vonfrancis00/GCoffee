@@ -42,6 +42,21 @@ assert.equal(sheets['Recipe Ingredients'].data.length,2);
 assert.equal(sheets['Recipe Ingredients'].data[1][1],'Coffee Beans');
 assert.equal(run("routeGet_('getProducts',{})")[0].recipe[0].quantity,27);
 assert.throws(()=>run("calculate_([{productId:'REC001',quantitySold:1,customizations:{RM001:{mode:'Exact',value:''}}}])"),/required/);
+// Count-unit aliases must work without weakening incompatible-unit validation.
+run("updateById_('Inventory','ID','RM001',{Unit:'pcs'})");
+sheets['Recipe Ingredients'].data[1][2]=2;
+for(const unit of ['pc','pcs','piece','pieces',' PC ']){
+  sheets['Recipe Ingredients'].data[1][3]=unit;
+  const result=run("calculate_([{productId:'REC001',quantitySold:3}])")[0];
+  assert.equal(result.required,6);
+  assert.equal(result.unit,'pcs');
+}
+sheets['Recipe Ingredients'].data[1][3]='pc';
+assert.throws(()=>run("calculate_([{productId:'REC001',quantitySold:1,customizations:{RM001:{mode:'Exact',value:0.5}}}])"),/whole-number/);
+assert.throws(()=>run("calculate_([{productId:'REC001',quantitySold:0.5}])"),/whole-number/);
+sheets['Recipe Ingredients'].data[1][3]='g';
+assert.throws(()=>run("calculate_([{productId:'REC001',quantitySold:1}])"),/Unit mismatch/);
+assert.throws(()=>run("saveRecipe_({productId:'REC001',recipe:[{materialId:'RM001',quantity:2,unit:'g'}]})"),/Unit mismatch/);
 sheets['Recipe Ingredients'].data[1][1]='Missing material';
 assert.throws(()=>run("rows_('Recipes')"),/Unknown or ambiguous/);
 console.log('New sheet adapter checks passed.');
