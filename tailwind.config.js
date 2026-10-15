@@ -7,9 +7,9 @@ export default {
     extend: {
       colors: {
         slate: colors.neutral,
-        coffee: { 50:'#fafafa', 100:'#f5f5f5', 600:'#525252', 700:'#404040', 800:'#171717', 900:'#000000' }
+        coffee: { 50:'#f8f5f0', 100:'#eee5d9', 600:'#967451', 700:'#725538', 800:'#493729', 900:'#272a24' }
       },
-      boxShadow: { soft:'0 8px 28px rgba(0, 0, 0, .07)' }
+      boxShadow: { soft:'0 3px 16px rgba(44, 39, 31, .025)' }
     }
   },
   plugins: []
