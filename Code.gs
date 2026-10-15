@@ -376,3 +376,63 @@ function validateBusinessDate_(d){if(!/^\d{4}-\d{2}-\d{2}$/.test(String(d||'')))
 function validQty_(v,label){if(v===null||v===undefined||String(v).trim()==='')throw new Error(label+' is required.');const n=Number(v);if(!Number.isFinite(n)||n<0)throw new Error(label+' must be a finite nonnegative number.');return n;}
 function roundQty_(n){return Math.round((Number(n)+Number.EPSILON)*1000000)/1000000;}
 function today_(){return Utilities.formatDate(new Date(),Session.getScriptTimeZone(),'yyyy-MM-dd');}
+// Run manually in the Apps Script editor to categorize the connected inventory.
+// Safe to rerun: fills blank categories only; stock and existing categories are preserved.
+function setupInventoryCategories() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const sh = tab_('Inventory');
+    const values = sh.getDataRange().getValues();
+    const headers = headers_('Inventory', values[0]);
+    const nameColumn = headers.indexOf('Name');
+    if (nameColumn < 0) throw new Error('Inventory requires a Raw Material or Name column.');
+    if (headers.filter(h => h === 'Category').length > 1) throw new Error('Multiple Category columns found. Keep one Category column before running this function.');
+    const groups = {
+      'Coffee & Beverage Bases': ['Coffee Beans', 'Matcha Powder', 'Cocoa Powder'],
+      'Dairy & Cream Products': ['Fresh Milk', 'All-Purpose Cream', 'Whipping Cream', 'Butter', 'Cheese'],
+      'Syrups & Sweeteners': ['Sugar', 'Vanilla Syrup', 'Caramel Syrup', 'Chocolate Syrup'],
+      'Meat & Poultry': ['Beef', 'Pork', 'Chicken Breast', 'Bacon'],
+      'Grains, Bread & Pasta': ['Rice (Uncooked)', 'Pasta', 'Bread'],
+      'Vegetables & Aromatics': ['Onion', 'Garlic'],
+      'Condiments, Seasonings & Cooking Essentials': ['Salt', 'Black Pepper', 'Soy Sauce', 'Vinegar', 'Cooking Oil'],
+      'Water & Ice': ['Drinking Water', 'Ice Cubes']
+    };
+    const normalize = name => String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const categories = {};
+    Object.keys(groups).forEach(category => groups[category].forEach(name => { categories[normalize(name)] = category; }));
+    let categoryColumn = headers.indexOf('Category') + 1;
+    const createdColumn = categoryColumn === 0;
+    if (createdColumn) {
+      categoryColumn = sh.getLastColumn() + 1;
+      if (categoryColumn > sh.getMaxColumns()) sh.insertColumnsAfter(sh.getMaxColumns(), 1);
+      sh.getRange(1, categoryColumn).setValue('Category');
+      sh.getRange(1, nameColumn + 1).copyFormatToRange(sh, categoryColumn, categoryColumn, 1, 1);
+    }
+    const formulas = values.length > 1 ? sh.getRange(2, categoryColumn, values.length - 1, 1).getFormulas() : [];
+    let updated = 0, preserved = 0;
+    const unmatched = [];
+    for (let row = 1; row < values.length; row++) {
+      const name = String(values[row][nameColumn] || '').trim();
+      if (!name) continue;
+      const existing = values[row][categoryColumn - 1];
+      if ((existing !== undefined && String(existing).trim() !== '') || formulas[row - 1][0]) { preserved++; continue; }
+      const category = categories[normalize(name)];
+      if (!category) { unmatched.push({row:row + 1, material:name}); continue; }
+      sh.getRange(row + 1, categoryColumn).setValue(category);
+      updated++;
+    }
+    const validation = SpreadsheetApp.newDataValidation()
+      .requireValueInList(Object.keys(groups).concat(['Other']), true)
+      .setAllowInvalid(true)
+      .setHelpText('Choose an inventory category. Existing custom categories are allowed.')
+      .build();
+    if (sh.getMaxRows() > 1) sh.getRange(2, categoryColumn, sh.getMaxRows() - 1, 1).setDataValidation(validation);
+    sh.setColumnWidth(categoryColumn, 310);
+    SpreadsheetApp.flush();
+    const result = {sheet:sh.getName(), createdColumn:createdColumn, updated:updated, preserved:preserved, unmatched:unmatched,
+      message:'Categories ready. Unmatched materials were left blank for manual categorization. Refresh the app to load the changes.'};
+    console.log(JSON.stringify(result));
+    return result;
+  } finally { lock.releaseLock(); }
+}
